@@ -8,4 +8,11 @@ This boilerplate helps identify the starting point.
 
 <img src="h2d_ovlp.png" height="500"></img>
 
-## Process
+## How to get it work?
+* Create your benchmark. Here, I use vector add kernel.
+* Create the executable.
+* Specify the options through shell script and dump the trace file using **nvprof**.
+* Run the python script transfer_ovlp.py.
+* Finally, it will print out the data size for each vector and the starting piont timing. 
+
+p.s., the data size is increased with 100 floats per step. You can decrease it for more accurate timing.
