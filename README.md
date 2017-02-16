@@ -1,6 +1,13 @@
 # h2d_overlapping
 benchmarking the overlapping for multiple cuda streams
 
+## Author
+Leiming Yu
+
+* Email: ylm@ece.neu.edu
+* Twitter: @yu_leiming
+* Blog: http://www1.coe.neu.edu/~ylm/
+
 ## Background
 When running multiple cuda streams to explore the concurrency for data transfer, the actual starting point of launching next cuda stream depends on the cuda driver and gpu device.
 
