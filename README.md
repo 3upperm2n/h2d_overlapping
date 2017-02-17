@@ -20,6 +20,11 @@ This boilerplate helps identify the starting point.
 * Create the executable.
 * Specify the options through shell script and dump the trace file using **nvprof**.
 * Run the python script transfer_ovlp.py.
-* Finally, it will print out the data size for each vector and the starting piont timing. 
+* Finally, it will print out the data size for each vector and the starting piont timing.
 
+```bash
+N = 17400, d2h-h2d overlap : 0.028192 (ms)
+N = 2409300, h2d-h2d overlap : 3.158431 (ms)
+ ```
+ 
 p.s., the data size is increased with 100 floats per step. You can decrease it for more accurate timing.
