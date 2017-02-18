@@ -3,15 +3,15 @@
 """
 Check the timing for overlapping transfer on GPU device.
 """
-
+import warnings
 import subprocess
 import pandas as pd
 import numpy as np
-import warnings
+
 warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
 
 
-class transfer():
+class Transfer(object):
     """
     class to store star and end time in ms
     """
@@ -20,7 +20,7 @@ class transfer():
         self.end_time_ms = end
 
 
-class streams():
+class Streams(object):
     """
     class to store CUDA stream api timing
     """
@@ -34,8 +34,6 @@ def time_coef_ms(df_trace):
     """
     check the timing unit and using ms by adjusting the coefficients
     """
-    rows, cols = df_trace.shape
-
     start_unit = df_trace['Start'].iloc[0]
     duration_unit = df_trace['Duration'].iloc[0]
 
@@ -80,7 +78,6 @@ def read_trace(trace_file):
     """
     Read trace in csv using pandas.
     """
-
     # There are max 17 columns in the output csv
     col_name = ["Start", "Duration", "Grid X", "Grid Y", "Grid Z", "Block X",
                 "Block Y", "Block Z", "Registers Per Thread", "Static SMem",
@@ -107,56 +104,55 @@ def set_up_streams(df_trace):
     """
     Configure the stream list
     """
-    streamList = []
     # read the number of unique streams
     stream_id_list = df_trace['Stream'].unique()
     stream_id_list = stream_id_list[~np.isnan(stream_id_list)]  # remove nan
     num_streams = len(stream_id_list)
 
+    streamlist = [None] * num_streams
     for i in range(num_streams):
-        streamList.append(streams())
+        streamlist[i] = Streams()
 
-    return streamList, stream_id_list
+    return streamlist, stream_id_list
 
 
-def update_stream(df_trace, streamList, stream_id_list, start_coef,
+def update_stream(df_trace, streamlist, stream_id_list, start_coef,
                   duration_coef):
     """
     record stream info from the datatrace
     """
     # read row by row
-    for rowID in range(1, df_trace.shape[0]):
+    for rowid in range(1, df_trace.shape[0]):
         #  extract info from the current row
         stream_id, api_type, start_time_ms, end_time_ms = \
-            read_row(df_trace.iloc[[rowID]], start_coef, duration_coef)
+            read_row(df_trace.iloc[[rowid]], start_coef, duration_coef)
 
         # find out index of the stream
         sid, = np.where(stream_id_list == stream_id)
 
         # add the start/end time for different api calls
         if api_type == 'h2d':
-            streamList[sid].h2d.append(transfer(start_time_ms, end_time_ms))
+            streamlist[sid].h2d.append(Transfer(start_time_ms, end_time_ms))
         elif api_type == 'd2h':
-            streamList[sid].d2h.append(transfer(start_time_ms, end_time_ms))
+            streamlist[sid].d2h.append(Transfer(start_time_ms, end_time_ms))
         elif api_type == 'kernel':
-            streamList[sid].kernel.append(transfer(start_time_ms, end_time_ms))
+            streamlist[sid].kernel.append(Transfer(start_time_ms, end_time_ms))
         else:
-            print("Unknown. Error.")
+            print "Unknown. Error."
 
-    return streamList
+    return streamlist
 
 
-def check_overlap(streamList):
+def check_overlap(streamlist):
     """
     check whether two cuda streams has data transfer overlap
     """
     h2d_api_list = []
     d2h_api_list = []
 
-    for i in range(len(streamList)):
-        current_stream = streamList[i]
-
-        h2d_ = transfer(current_stream.h2d[0].start_time_ms,
+    #for i in range(len(streamlist)):
+    for _, current_stream in enumerate(streamlist):
+        h2d_ = Transfer(current_stream.h2d[0].start_time_ms,
                         current_stream.h2d[0].end_time_ms)
 
         for j in range(1, len(current_stream.h2d)):
@@ -169,7 +165,7 @@ def check_overlap(streamList):
         # append the h2d timing for the current stream
         h2d_api_list.append(h2d_)
 
-        d2h_ = transfer(current_stream.d2h[0].start_time_ms,
+        d2h_ = Transfer(current_stream.d2h[0].start_time_ms,
                         current_stream.d2h[0].end_time_ms)
 
         for j in range(1, len(current_stream.d2h)):
@@ -191,7 +187,7 @@ def check_overlap(streamList):
     h2d_h2d_ovlp = 0
     h2h_h2d_ovhd_ms = 0.0
 
-    for i in range(1, len(streamList)):
+    for i in range(1, len(streamlist)):
         prev_stream_api = h2d_api_list[i-1].start_time_ms
         current_stream_api = h2d_api_list[i].start_time_ms
 
@@ -203,7 +199,7 @@ def check_overlap(streamList):
             h2d_h2d_ovlp = 1
 
     # compute the avg ovhd
-    h2d_h2d_ovhd_ms = h2h_h2d_ovhd_ms / float(len(streamList) - 1)
+    h2d_h2d_ovhd_ms = h2h_h2d_ovhd_ms / float(len(streamlist) - 1)
 
     # --------
     # check D2H-H2D Overapping
@@ -213,7 +209,7 @@ def check_overlap(streamList):
     d2h_h2d_ovlp = 0
     d2h_h2d_ovhd_ms = 0.0
 
-    for i in range(1, len(streamList)):
+    for i in range(1, len(streamlist)):
         pre_h2d_start = h2d_api_list[i-1].start_time_ms
 
         cur_h2d_start = h2d_api_list[i].start_time_ms
@@ -227,20 +223,20 @@ def check_overlap(streamList):
             d2h_h2d_ovlp = 1
 
     # compute the avg ovhd
-    d2h_h2d_ovhd_ms = d2h_h2d_ovhd_ms / float(len(streamList) - 1)
+    d2h_h2d_ovhd_ms = d2h_h2d_ovhd_ms / float(len(streamlist) - 1)
 
     return d2h_h2d_ovlp, d2h_h2d_ovhd_ms, h2d_h2d_ovlp, h2d_h2d_ovhd_ms
 
 
-def run_trace(N):
+def run_trace(input_num):
     """
     Generate trace and check the overlapping
     """
     # ----------------
     # call shell script to generate the trace
     # ----------------
-    N_str = str(N)
-    subprocess.call(['./1_gen_trace.sh', N_str])
+    input_num_str = str(input_num)
+    subprocess.call(['./1_gen_trace.sh', input_num_str])
 
     # ----------------
     # read trace
@@ -250,7 +246,7 @@ def run_trace(N):
     # ----------------
     # set up the stream list
     # ----------------
-    streamList, stream_id_list = set_up_streams(df_trace)
+    streamlist, stream_id_list = set_up_streams(df_trace)
 
     # ----------------
     # adjust the timing unit to ms
@@ -260,14 +256,14 @@ def run_trace(N):
     # ----------------
     # Read data frame row by row, to update the streamList[].
     # ----------------
-    streamList = update_stream(df_trace, streamList, stream_id_list, start_coef,
+    streamlist = update_stream(df_trace, streamlist, stream_id_list, start_coef,
                                duration_coef)
 
     # ----------------
     # check d2h-h2d / h2d-h2d overlap
     # ----------------
     d2h_h2d_ovlp, d2h_h2d_ovhd_ms, h2d_h2d_ovlp, h2d_h2d_ovhd_ms = \
-        check_overlap(streamList)
+        check_overlap(streamlist)
 
     return d2h_h2d_ovlp, d2h_h2d_ovhd_ms, h2d_h2d_ovlp, h2d_h2d_ovhd_ms
 
@@ -277,23 +273,23 @@ def main():
     Main Function.
     """
 
-    N = 10000  # start from 10K floats
+    input_num = 10000  # start from 10K floats
 
     quiet_d2h = 0
 
     while True:
         d2h_h2d_ovlp, d2h_h2d_ovhd_ms, h2d_h2d_ovlp, h2d_h2d_ovhd_ms = \
-            run_trace(N)
+            run_trace(input_num)
 
         if d2h_h2d_ovlp == 1 and h2d_h2d_ovlp == 0 and quiet_d2h == 0:
-            print("N = %d, d2h-h2d overlap : %f (ms)\n" % (N, d2h_h2d_ovhd_ms))
+            print "N = %d, d2h-h2d overlap : %f (ms)\n" % (input_num, d2h_h2d_ovhd_ms)
             quiet_d2h = 1
 
         if h2d_h2d_ovlp == 1:
-            print("N = %d, h2d-h2d overlap : %f (ms)\n" % (N, h2d_h2d_ovhd_ms))
+            print "N = %d, h2d-h2d overlap : %f (ms)\n" % (input_num, h2d_h2d_ovhd_ms)
             break
 
-        N += 100  # increment 100 floats
+        input_num += 100  # increment 100 floats
 
 
 if __name__ == "__main__":
